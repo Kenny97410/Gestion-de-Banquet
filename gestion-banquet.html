@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des Agapes ASJDC</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        h1, h2 {
+            color: #1a237e;
+        }
+        #appContent {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        form {
+            margin-bottom: 20px;
+        }
+        input, select, button {
+            margin: 5px 0;
+            padding: 8px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #1a237e;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #3949ab;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            background-color: #e8eaf6;
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 5px;
+            position: relative;
+        }
+        .agape-actions {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+        .agape-actions button {
+            width: auto;
+            padding: 5px 10px;
+            margin-left: 5px;
+        }
+        #searchForm {
+            display: flex;
+            gap: 10px;
+        }
+        #searchInput {
+            flex-grow: 1;
+        }
+        #exportButton {
+            background-color: #4caf50;
+        }
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            .agape-actions {
+                position: static;
+                margin-top: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="appContent">
+        <h1>Gestion des Agapes ASJDC</h1>
+        
+        <form id="agapeForm">
+            <input type="date" id="date" required>
+            <input type="text" id="lieu" placeholder="Lieu" required>
+            <input type="number" id="participants" placeholder="Nombre de participants" required>
+            <input type="text" id="frerePayeur1" placeholder="Frère payeur 1" required>
+            <input type="text" id="frerePayeur2" placeholder="Frère payeur 2" required>
+            <input type="text" id="frerePayeur3" placeholder="Frère payeur 3">
+            <input type="text" id="menu" placeholder="Menu" required>
+            <button type="submit" id="submitButton">Ajouter Agape</button>
+        </form>
+
+        <h2>Gestion des Stocks</h2>
+        <form id="stockForm">
+            <input type="text" id="boisson" placeholder="Nom de la boisson" required>
+            <input type="number" id="quantite" placeholder="Quantité" required>
+            <button type="submit">Ajouter au stock</button>
+        </form>
+        <ul id="stockList"></ul>
+
+        <h2>Recherche et Exportation</h2>
+        <form id="searchForm">
+            <input type="text" id="searchInput" placeholder="Rechercher...">
+            <button type="submit">Rechercher</button>
+            <button type="button" id="exportButton" onclick="exportToCSV()">Exporter en CSV</button>
+        </form>
+
+        <h2>Liste des Agapes</h2>
+        <ul id="agapeList"></ul>
+    </div>
+
+    <script>
+        let agapes = [];
+        let stocks = [];
+        const agapeForm = document.getElementById('agapeForm');
+        const stockForm = document.getElementById('stockForm');
+        const agapeList = document.getElementById('agapeList');
+        const stockList = document.getElementById('stockList');
+        const submitButton = document.getElementById('submitButton');
+        let editingIndex = -1;
+
+        function saveData() {
+            localStorage.setItem('agapes', JSON.stringify(agapes));
+            localStorage.setItem('stocks', JSON.stringify(stocks));
+        }
+
+        function loadData() {
+            const savedAgapes = localStorage.getItem('agapes');
+            const savedStocks = localStorage.getItem('stocks');
+            if (savedAgapes) {
+                agapes = JSON.parse(savedAgapes);
+                renderAgapes();
+            }
+            if (savedStocks) {
+                stocks = JSON.parse(savedStocks);
+                renderStocks();
+            }
+        }
+
+        agapeForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const agape = {
+                date: document.getElementById('date').value,
+                lieu: document.getElementById('lieu').value,
+                participants: parseInt(document.getElementById('participants').value),
+                frerePayeur1: document.getElementById('frerePayeur1').value,
+                frerePayeur2: document.getElementById('frerePayeur2').value,
+                frerePayeur3: document.getElementById('frerePayeur3').value,
+                menu: document.getElementById('menu').value,
+                coutTotal: 60 * 3 // 60€ par frère payeur, toujours 3 frères
+            };
+            
+            if (editingIndex === -1) {
+                agapes.push(agape);
+            } else {
+                agapes[editingIndex] = agape;
+                editingIndex = -1;
+                submitButton.textContent = 'Ajouter Agape';
+            }
+            
+            saveData();
+            renderAgapes();
+            agapeForm.reset();
+        });
+
+        stockForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const boisson = document.getElementById('boisson').value;
+            const quantite = parseInt(document.getElementById('quantite').value);
+            
+            const index = stocks.findIndex(item => item.nom === boisson);
+            if (index !== -1) {
+                stocks[index].quantite += quantite;
+            } else {
+                stocks.push({ nom: boisson, quantite: quantite });
+            }
+            
+            saveData();
+            renderStocks();
+            stockForm.reset();
+        });
+
+        function renderAgapes(filteredAgapes = agapes) {
+            agapeList.innerHTML = '';
+            filteredAgapes.forEach((agape, index) => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <strong>Date:</strong> ${agape.date}<br>
+                    <strong>Lieu:</strong> ${agape.lieu}<br>
+                    <strong>Participants:</strong> ${agape.participants}<br>
+                    <strong>Frères payeurs:</strong> ${agape.frerePayeur1}, ${agape.frerePayeur2}${agape.frerePayeur3 ? ', ' + agape.frerePayeur3 : ''}<br>
+                    <strong>Coût total:</strong> ${agape.coutTotal}€<br>
+                    <strong>Menu:</strong> ${agape.menu}<br>
+                    <strong>Loge:</strong> ASJDC
+                    <div class="agape-actions">
+                        <button onclick="editAgape(${index})">Modifier</button>
+                        <button onclick="deleteAgape(${index})">Supprimer</button>
+                    </div>
+                `;
+                agapeList.appendChild(li);
+            });
+        }
+
+        function renderStocks() {
+            stockList.innerHTML = '';
+            stocks.forEach((stock, index) => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <strong>${stock.nom}:</strong> ${stock.quantite}
+                    <button onclick="adjustStock(${index}, -1)">-</button>
+                    <button onclick="adjustStock(${index}, 1)">+</button>
+                `;
+                stockList.appendChild(li);
+            });
+        }
+
+        function adjustStock(index, amount) {
+            stocks[index].quantite += amount;
+            if (stocks[index].quantite <= 0) {
+                stocks.splice(index, 1);
+            }
+            saveData();
+            renderStocks();
+        }
+
+        function deleteAgape(index) {
+            if (confirm('Êtes-vous sûr de vouloir supprimer cette agape ?')) {
+                agapes.splice(index, 1);
+                saveData();
+                renderAgapes();
+            }
+        }
+
+        function editAgape(index) {
+            const agape = agapes[index];
+            document.getElementById('date').value = agape.date;
+            document.getElementById('lieu').value = agape.lieu;
+            document.getElementById('participants').value = agape.participants;
+            document.getElementById('frerePayeur1').value = agape.frerePayeur1;
+            document.getElementById('frerePayeur2').value = agape.frerePayeur2;
+            document.getElementById('frerePayeur3').value = agape.frerePayeur3 || '';
+            document.getElementById('menu').value = agape.menu;
+            
+            submitButton.textContent = 'Modifier Agape';
+            editingIndex = index;
+        }
+
+        document.getElementById('searchForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const filteredAgapes = agapes.filter(agape => 
+                agape.date.toLowerCase().includes(searchTerm) ||
+                agape.lieu.toLowerCase().includes(searchTerm) ||
+                agape.menu.toLowerCase().includes(searchTerm) ||
+                agape.frerePayeur1.toLowerCase().includes(searchTerm) ||
+                agape.frerePayeur2.toLowerCase().includes(searchTerm) ||
+                (agape.frerePayeur3 && agape.frerePayeur3.toLowerCase().includes(searchTerm))
+            );
+            renderAgapes(filteredAgapes);
+        });
+
+        function exportToCSV() {
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Date,Lieu,Participants,Frère payeur 1,Frère payeur 2,Frère payeur 3,Coût total,Menu,Loge\n";
+            
+            agapes.forEach(agape => {
+                csvContent += `${agape.date},${agape.lieu},${agape.participants},${agape.frerePayeur1},${agape.frerePayeur2},${agape.frerePayeur3 || ''},${agape.coutTotal},${agape.menu},ASJDC\n`;
+            });
+            
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "agapes_asjdc.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Charger les données au démarrage de l'application
+        loadData();
+    </script>
+</body>
+</html>
